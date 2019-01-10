@@ -13,6 +13,10 @@ const db = knex({
     database: 'smart-brain'
   }
 });
+// THIS * WORKS HERE SO IM SO FUCKING CONFUSED.
+// console.log(db.select('*').from('users').then(data => {
+//   console.log(data);
+// }));
 
 
 const app = express();
@@ -54,29 +58,52 @@ app.get('/', (req, res) => {
 
 // SIGNIN 
 app.post('/signin', (req, res) => {
-  if (req.body.email === database.users[0].email &&
-    req.body.password === database.users[0].password) {
-    res.json(database.users[0]);
-  } else {
-    res.status(400).json('error logging in');
-  }
+  db.select('email', 'hash').from('login')
+    .where('email', '=', req.body.email)
+    .then(data => {
+      const isValid = bcrypt.compareSync(req.body.password, data[0].hash);
+      if (isValid) {
+        return db.select('*').from('users')
+          .where('email', '=', req.body.email)
+          .then(user => {
+            res.json(user[0])
+          })
+          .catch(err => res.status(400).json('unable to get user'))
+      } else {
+        res.status(400).json('wrong credentials');
+      }
+    })
+    .catch(err => res.status(400).json('wrong credentials'))
 });
 
 // REGISTER
 app.post('/register', (req, res) => {
   const { email, name, password } = req.body;
-  return db('users')
-    .returning('*')
-    .insert({
-      email: email,
-      name: name,
-      joined: new Date()
+  const hash = bcrypt.hashSync(password);
+  db.transaction(trx => {
+    trx.insert({
+      hash: hash,
+      email: email
     })
-    .then(users => {
-      res.json(users[0]);
-    })
-    .catch(err => res.status(400).json('Unable to register'));
-});
+      .into('login')
+      .returning('email')
+      .then(loginEmail => {
+        return trx('users')
+          .returning('*')
+          .insert({
+            email: email,
+            name: name,
+            joined: new Date()
+          })
+          .then(user => {
+            res.json(user[0]);
+          })
+      })
+      .then(trx.commit)
+      .catch(trx.rollback)
+  })
+    .catch(err => res.status(400).json('unable to register'))
+})
 
 // PROFILE
 app.get('/profile/:id', (req, res) => {
