@@ -122,9 +122,8 @@ app.get('/profile/:id', (req, res) => {
 // IMAGE
 app.put('/image', (req, res) => {
   const { id } = req.body;
-  db('users').where('id', '=', id)
+  db('users').select('entries').where('id', '=', id)
     .increment('entries', 1)
-    .returning('entries')
     .then(entries => {
       res.json(entries[0]);
     })
